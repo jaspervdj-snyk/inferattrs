@@ -8,8 +8,8 @@ Our [IaC product] is built around a large set of rules written in Rego,
 and customers can add their [own custom rules] as well.
 
 We recently released a [whole series of improvements] to our IaC product, and
-in this blogpost we're taking a technical deep dive into a particularly
-interesting feature: automagic source code locations for rule violations.
+in this blogpost we're taking a technical dive into a particularly interesting
+feature: automagic source code locations for rule violations.
 
 [Open Policy Agent]: https://www.openpolicyagent.org/
 [IaC product]: https://snyk.io/product/infrastructure-as-code-security/
