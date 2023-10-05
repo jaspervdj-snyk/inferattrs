@@ -7,11 +7,11 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
-        Ref: myVPC
+        Ref: Vpc
       CidrBlock: 10.0.0.0/24
   BackupSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
-        Ref: myVPC
+        Ref: Vpc
       CidrBlock: 10.0.128.0/20

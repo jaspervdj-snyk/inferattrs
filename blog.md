@@ -3,11 +3,13 @@ title: 'Automagic source locations in Rego'
 author: 'Jasper Van der Jeugt'
 ...
 
+# Introduction
+
 At Snyk, we are big fans of [Open Policy Agent]'s Rego.
 Our [IaC product] is built around a large set of rules written in Rego,
 and customers can add their [own custom rules] as well.
 
-~~~{.go snippet="infer.go"}
+~~~{.go snippet="main.go"}
 type locationTracer
 ~~~
 
@@ -20,65 +22,79 @@ feature: automagic source code locations for rule violations.
 [own custom rules]: https://docs.snyk.io/scan-infrastructure/build-your-own-custom-rules/build-your-own-iac+-to-cloud-custom-rules
 [whole series of improvements]: https://snyk.io/blog/announcing-iac-plus-early-access/
 
-Let's start by looking at some example Rego code.  We'll be brief since this
-is not the focus of this blogpost: if you want to learn Rego, we recommend
-the excellent [OPA by Example] course.
+The code in this blogpost serves as a standalone example of this technique,
+but in order to lean more towards a short story than an epic, we'll need to
+make some simplifications.  The full implementation of this is available
+in our [unified policy engine].
+
+[unified policy engine]: https://github.com/snyk/policy-engine/
+
+Let's start by looking at CloudFormation example.  While our IaC engine supports
+many formats, with a strong focus around Terraform, CloudFormation is a good
+subject for this blogpost since we can parse it without too many dependencies
+(it's just YAML after all).
+
+~~~{.yaml include="template.yml"}
+~~~
+
+We want to ensure no subnets use a CIDR block larger than `/24`.  We can write
+a Rego policy to do just that.
+
+~~~{.ruby include="policy.rego"}
+~~~
+
+This way, `deny` will produce a set of _denied_ resources.  We won't go into how
+Rego works in detail since that's not the goal of this blogpost: if you want to
+learn Rego, we recommend the excellent [OPA by Example] course.
 
 [OPA by Example]: https://academy.styra.com/courses/opa-by-example
 
-~~~{.go snippet="infer.go"}
+We can subdivide the problem in two parts:
+
+1.  We'll want to infer that our policy uses the `CidrBlock` attribute
+2.  Then, we'll retrieve the source code location for this
+
+Let's start with (2) since it provides a good way to familiarize ourselves with
+the code.
+
+# Source Location retrieval
+
+A source location looks like this:
+
+~~~{.go snippet="main.go"}
+type Location
+~~~
+
+We will also introduce an auxiliary type to represent paths in YAML.  Note that
+we won't support arrays in our proof-of-concept, so we can get by just using an
+array of strings.
+
+~~~{.go snippet="main.go"}
 type Path
 ~~~
 
-```rego
-package rules.subnet_24
+One example of a path would be something like:
 
-resource_type := "aws_subnet"
+~~~{.go}
+Path{"Resources", "BackupSubnet", "Properties", "CidrBlock"}
+~~~
 
-deny[info] {
-	[_, mask] = split(input.cidr_block, "/")
-	to_number(mask) < 24
-	info := {"message": "Subnets should not use CIDR blocks larger than /24"}
-}
-```
+Now we can provide a convenience type to load YAML and tell us the `Location`
+of certain `Path`s.
 
-Rego is a general-purpose language, and frameworks that use Rego typically have
-some conventions on top of that to tailor it to their use case.  You can see
-some of those in action here:
+~~~{.go snippet="main.go"}
+type Source
+~~~
 
-1.  `package rules.subnet_24`: we expect all IaC rules to live somewhere within
-    the `rules` namespace.
-2.  `resource_type := "aws_subnet"`: we're declaring a rule which will validate
-    `aws_subnet` resources.  The engine itself will take care of gathering those
-    resources, be it from terraform plan files, HCL files, or even resources
-    found in cloud environments.
-3.  `deny[info]`: the entrypoint to our rules is called `deny`; and `info` can
-    be used by the rule author to present relevant information to the user.
-    In this example we just set a message.
+~~~{.go snippet="main.go"}
+func NewSource
+~~~
 
-Let's look at some IaC code to make things a bit more concrete.  In this simple
-file, we have one VPC and two subnets; out of which one subnet would be
-considered invalid by our rule:
+Finding the source location of a `Path` comes down to walking a tree of YAML
+nodes:
 
-```hcl
-resource "aws_vpc" "vpc" {
-  cidr_block = "10.0.0.0/16"
-}
+~~~{.go snippet="main.go"}
+func (s *Source) Location
+~~~
 
-resource "aws_subnet" "main" {
-  vpc_id     = aws_vpc.vpc.id
-  cidr_block = "10.0.0.0/24"
-}
 
-resource "aws_subnet" "backup" {
-  vpc_id     = aws_vpc.vpc.id
-  cidr_block = "10.0.128.0/20"
-}
-```
-
-So far so good; and with some HCL parsing we can easily imagine tying this
-together
-
-1.  Example with manual attributes
-2.  Inferring attributes with tracer
-3.  Policy engine output?

@@ -13,7 +13,55 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type Location struct {
+	File   string
+	Line   int
+	Column int
+}
+
 type Path []string
+
+type Source struct {
+	file string
+	root *yaml.Node
+}
+
+func NewSource(file string) (*Source, error) {
+	bytes, err := ioutil.ReadFile(file)
+	if err != nil {
+		return nil, err
+	}
+
+	var root yaml.Node
+	if err := yaml.Unmarshal(bytes, &root); err != nil {
+		return nil, err
+	}
+
+	return &Source{file: file, root: &root}, nil
+}
+
+func (s *Source) Location(path Path) *Location {
+	cursor := s.root
+	for len(path) > 0 {
+		switch cursor.Kind {
+		// Ignore multiple docs in our PoC
+		case yaml.DocumentNode:
+			cursor = cursor.Content[0]
+		case yaml.MappingNode:
+			for i := 0; i < len(cursor.Content); i += 2 {
+				if cursor.Content[i].Value == path[0] {
+					cursor = cursor.Content[i+1]
+					path = path[1:]
+				}
+			}
+		}
+	}
+	return &Location{
+		File:   s.file,
+		Line:   cursor.Line,
+		Column: cursor.Column,
+	}
+}
 
 func annotate(p Path, t *ast.Term) {
 	t.Location = &ast.Location{}
@@ -42,87 +90,28 @@ func (t trie) add(p Path) {
 }
 
 func (t trie) list() []Path {
-    if len(t) == 0 {
-        return []Path{{}}
-    } else {
-    	out := []Path{}
-        for k, child := range t {
-    		for _, childPath := range child.list() {
-        		p := Path{k}
-        		p = append(p, childPath...)
-        		out = append(out, p)
-    		}
-        }
-        return out
-    }
-}
-
-func nodeToTerm(file string, node *yaml.Node) *ast.Term {
-	var term *ast.Term
-	switch node.Kind {
-	case yaml.ScalarNode:
-		switch node.Tag {
-		case "!!str":
-			term = ast.StringTerm(node.Value)
-		default:
-			fmt.Fprintf(os.Stderr, "Unknown tag: %s\n", node.Tag)
-			return nil
-		}
-	case yaml.DocumentNode:
-		term = nodeToTerm(file, node.Content[0])
-	case yaml.MappingNode:
-		props := [][2]*ast.Term{}
-		for i := 0; i < len(node.Content); i += 2 {
-			k := nodeToTerm(file, node.Content[i])
-			v := nodeToTerm(file, node.Content[i+1])
-			props = append(props, [2]*ast.Term{k, v})
-		}
-		term = ast.ObjectTerm(props...)
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown kind: %v\n", node.Kind)
-		return nil
-	}
-	term.Location = &ast.Location{
-		File: file,
-		Row:  node.Line,
-		Col:  node.Column,
-	}
-	return term
-}
-
-func location(file string, node *yaml.Node, path Path) *loc {
-	if len(path) > 0 {
-		switch node.Kind {
-		case yaml.DocumentNode:
-			return location(file, node.Content[0], path)
-		case yaml.MappingNode:
-			for i := 0; i < len(node.Content); i += 2 {
-				if node.Content[i].Value == path[0] {
-					return location(file, node.Content[i+1], path[1:])
-				}
+	if len(t) == 0 {
+		return []Path{{}}
+	} else {
+		out := []Path{}
+		for k, child := range t {
+			for _, childPath := range child.list() {
+				p := Path{k}
+				p = append(p, childPath...)
+				out = append(out, p)
 			}
 		}
+		return out
 	}
-	return &loc{
-		File:   file,
-		Line:   node.Line,
-		Column: node.Column,
-	}
-}
-
-type loc struct {
-	File   string
-	Line   int
-	Column int
 }
 
 type locationTracer struct {
-	locations map[loc]struct{}
+	locations map[Location]struct{}
 	trie      trie
 }
 
 func newLocationTracer() *locationTracer {
-	return &locationTracer{locations: map[loc]struct{}{}, trie: trie{}}
+	return &locationTracer{locations: map[Location]struct{}{}, trie: trie{}}
 }
 
 func (t *locationTracer) Enabled() bool {
@@ -140,7 +129,7 @@ func (t *locationTracer) Trace(event *topdown.Event) {
 
 func (t *locationTracer) coverTerm(term *ast.Term) {
 	if term.Location != nil && term.Location.Text != nil {
-		t.locations[loc{
+		t.locations[Location{
 			File:   term.Location.File,
 			Line:   term.Location.Row,
 			Column: term.Location.Col,
@@ -182,6 +171,11 @@ func (t *locationTracer) traceEval(event *topdown.Event) {
 }
 
 func infer(file string) error {
+	source, err := NewSource(file)
+	if err != nil {
+		return err
+	}
+
 	bytes, err := ioutil.ReadFile(file)
 	if err != nil {
 		return err
@@ -191,8 +185,18 @@ func infer(file string) error {
 	if err := yaml.Unmarshal(bytes, &node); err != nil {
 		return err
 	}
-	input := nodeToTerm(file, &node)
-	annotate(Path{}, input)
+
+	var doc interface{}
+	if err := yaml.Unmarshal(bytes, &doc); err != nil {
+		return err
+	}
+
+	input, err := ast.InterfaceToValue(doc)
+	if err != nil {
+		return err
+	}
+
+	annotate(Path{}, ast.NewTerm(input))
 	fmt.Fprintf(os.Stderr, "Input: %v\n", input)
 
 	if bytes, err = ioutil.ReadFile("policy.rego"); err != nil {
@@ -202,7 +206,7 @@ func infer(file string) error {
 	tracer := newLocationTracer()
 	results, err := rego.New(
 		rego.Module("policy.rego", string(bytes)),
-		rego.ParsedInput(input.Value),
+		rego.ParsedInput(input),
 		rego.Query("data.policy.deny"),
 		rego.Tracer(tracer),
 	).Eval(context.Background())
@@ -210,9 +214,9 @@ func infer(file string) error {
 		return err
 	}
 
-	locations := []*loc{}
+	locations := []*Location{}
 	for _, path := range tracer.trie.list() {
-    	locations = append(locations, location(file, &node, path))
+		locations = append(locations, source.Location(path))
 	}
 
 	fmt.Fprintf(os.Stderr, "Results: %v\n", results)

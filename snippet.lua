@@ -7,11 +7,10 @@ string.endswith = function(self, suffix)
 end
 
 function CodeBlock(cb)
-  local file = cb.attributes.snippet
-  if file then
+  if cb.attributes.snippet then
     local snippet = {}
     local inbraces = false
-    for line in io.open("infer.go", "r"):lines() do
+    for line in io.open(cb.attributes.snippet, "r"):lines() do
       if line:startswith(cb.text) then
         snippet[#snippet + 1] = line
         if line:endswith("{") then
@@ -27,5 +26,11 @@ function CodeBlock(cb)
     end
     return pandoc.CodeBlock(table.concat(snippet, "\n"), cb.attr), false
   end
+
+  if cb.attributes.include then
+    local include = io.open(cb.attributes.include, "r"):read("*all")
+    return pandoc.CodeBlock(include, cb.attr)
+  end
+
   return cb, true
 end
