@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -11,6 +12,50 @@ import (
 	"github.com/open-policy-agent/opa/topdown"
 	"gopkg.in/yaml.v3"
 )
+
+type Path []string
+
+func annotate(p Path, t *ast.Term) {
+	t.Location = &ast.Location{}
+	t.Location.Text, _ = json.Marshal(p)
+	switch value := t.Value.(type) {
+	case ast.Object:
+		for _, key := range value.Keys() {
+			if str, ok := key.Value.(ast.String); ok {
+				p = append(p, string(str))
+				annotate(p, value.Get(key))
+				p = p[:len(p)-1]
+			}
+		}
+	}
+}
+
+type trie map[string]trie
+
+func (t trie) add(p Path) {
+	if len(p) > 0 {
+		if _, ok := t[p[0]]; !ok {
+			t[p[0]] = map[string]trie{}
+		}
+		t[p[0]].add(p[1:])
+	}
+}
+
+func (t trie) list() []Path {
+    if len(t) == 0 {
+        return []Path{{}}
+    } else {
+    	out := []Path{}
+        for k, child := range t {
+    		for _, childPath := range child.list() {
+        		p := Path{k}
+        		p = append(p, childPath...)
+        		out = append(out, p)
+    		}
+        }
+        return out
+    }
+}
 
 func nodeToTerm(file string, node *yaml.Node) *ast.Term {
 	var term *ast.Term
@@ -45,18 +90,39 @@ func nodeToTerm(file string, node *yaml.Node) *ast.Term {
 	return term
 }
 
-type location struct {
+func location(file string, node *yaml.Node, path Path) *loc {
+	if len(path) > 0 {
+		switch node.Kind {
+		case yaml.DocumentNode:
+			return location(file, node.Content[0], path)
+		case yaml.MappingNode:
+			for i := 0; i < len(node.Content); i += 2 {
+				if node.Content[i].Value == path[0] {
+					return location(file, node.Content[i+1], path[1:])
+				}
+			}
+		}
+	}
+	return &loc{
+		File:   file,
+		Line:   node.Line,
+		Column: node.Column,
+	}
+}
+
+type loc struct {
 	File   string
 	Line   int
 	Column int
 }
 
 type locationTracer struct {
-	locations map[location]struct{}
+	locations map[loc]struct{}
+	trie      trie
 }
 
 func newLocationTracer() *locationTracer {
-	return &locationTracer{locations: map[location]struct{}{}}
+	return &locationTracer{locations: map[loc]struct{}{}, trie: trie{}}
 }
 
 func (t *locationTracer) Enabled() bool {
@@ -73,12 +139,16 @@ func (t *locationTracer) Trace(event *topdown.Event) {
 }
 
 func (t *locationTracer) coverTerm(term *ast.Term) {
-	if term.Location != nil {
-		t.locations[location{
+	if term.Location != nil && term.Location.Text != nil {
+		t.locations[loc{
 			File:   term.Location.File,
 			Line:   term.Location.Row,
 			Column: term.Location.Col,
 		}] = struct{}{}
+
+		var path Path
+		json.Unmarshal(term.Location.Text, &path)
+		t.trie.add(path)
 	}
 }
 
@@ -122,6 +192,7 @@ func infer(file string) error {
 		return err
 	}
 	input := nodeToTerm(file, &node)
+	annotate(Path{}, input)
 	fmt.Fprintf(os.Stderr, "Input: %v\n", input)
 
 	if bytes, err = ioutil.ReadFile("policy.rego"); err != nil {
@@ -139,8 +210,15 @@ func infer(file string) error {
 		return err
 	}
 
+	locations := []*loc{}
+	for _, path := range tracer.trie.list() {
+    	locations = append(locations, location(file, &node, path))
+	}
+
 	fmt.Fprintf(os.Stderr, "Results: %v\n", results)
 	fmt.Fprintf(os.Stderr, "Locations: %v\n", tracer.locations)
+	fmt.Fprintf(os.Stderr, "Trie: %v\n", tracer.trie.list())
+	fmt.Fprintf(os.Stderr, "Locations 2: %v\n", locations)
 	return nil
 }
 
