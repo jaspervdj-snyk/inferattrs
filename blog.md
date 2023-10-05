@@ -7,6 +7,10 @@ At Snyk, we are big fans of [Open Policy Agent]'s Rego.
 Our [IaC product] is built around a large set of rules written in Rego,
 and customers can add their [own custom rules] as well.
 
+~~~{.go snippet="infer.go"}
+type locationTracer
+~~~
+
 We recently released a [whole series of improvements] to our IaC product, and
 in this blogpost we're taking a technical dive into a particularly interesting
 feature: automagic source code locations for rule violations.
@@ -21,6 +25,10 @@ is not the focus of this blogpost: if you want to learn Rego, we recommend
 the excellent [OPA by Example] course.
 
 [OPA by Example]: https://academy.styra.com/courses/opa-by-example
+
+~~~{.go snippet="infer.go"}
+type Path
+~~~
 
 ```rego
 package rules.subnet_24
