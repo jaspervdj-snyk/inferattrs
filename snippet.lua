@@ -27,7 +27,7 @@ function CodeBlock(cb)
         inbraces = false
       end
     end
-    return pandoc.CodeBlock(table.concat(snippet, "\n"), cb.attr), false
+    return pandoc.CodeBlock(table.concat(snippet, "\n"), cb.attr), true
   end
 
   if cb.attributes.include then
