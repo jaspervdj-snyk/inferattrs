@@ -1,3 +1,6 @@
+-- This is a Pandoc lua filter that will grab snippets (or entire files) and
+-- include them in our markdown.
+
 string.startswith = function(self, prefix)
   return string.sub(self, 1, string.len(prefix)) == prefix
 end

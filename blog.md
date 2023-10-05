@@ -97,4 +97,43 @@ nodes:
 func (s *Source) Location
 ~~~
 
+# Sets and trees of paths
 
+With that out of the way, we've reduced the problem from automatically
+inferring _source locations_ that are used in a policy to automatically
+inferring _attribute paths_.
+
+This is also significant for other reasons -- e.g., Snyk can apply the same
+policies to IaC resources as well as resources discovered through cloud scans,
+the latter of which don't really have meaningful source locations, but they do
+have meaningful attribute paths!
+
+Next, we want to define sets of attribute paths.  Since paths are backed by
+arrays, we unfortunately can't use something like `map[Path]struct{}` as a set
+in Go.
+
+Instead, we will need to store these in a recursive tree.
+
+~~~{.go snippet="main.go"}
+type PathTree
+~~~
+
+This representation has other advantages: in general, we only care about the
+_longest_ paths that a policy uses, since they are more _specific_.
+Our example policy is using
+`Path{"Resources", "BackupSubnet", "Properties"}` as well as
+`Path{"Resources", "BackupSubnet", "Properties", "CidrBlock"}`, and we only
+care about the latter.
+
+We'll define a recursive method to insert a `Path` into our tree:
+
+~~~{.go snippet="main.go"}
+func (t PathTree) Insert
+~~~
+
+As well as a way to get a list of `Path`s back out.  This does a bit of
+unnecessary allocation, but we can live with that.
+
+~~~{.go snippet="main.go"}
+func (t PathTree) List
+~~~

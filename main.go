@@ -63,6 +63,34 @@ func (s *Source) Location(path Path) *Location {
 	}
 }
 
+type PathTree map[string]PathTree
+
+func (t PathTree) Insert(path Path) {
+	if len(path) > 0 {
+		if _, ok := t[path[0]]; !ok {
+			t[path[0]] = map[string]PathTree{}
+		}
+		t[path[0]].Insert(path[1:])
+	}
+}
+
+func (t PathTree) List() []Path {
+	if len(t) == 0 {
+		return []Path{{}} // Return the empty path
+	} else {
+		out := []Path{}
+		for k, child := range t {
+			// Prepend `k` to every child path
+			for _, childPath := range child.List() {
+				path := Path{k}
+				path = append(path, childPath...)
+				out = append(out, path)
+			}
+		}
+		return out
+	}
+}
+
 func annotate(p Path, t *ast.Term) {
 	t.Location = &ast.Location{}
 	t.Location.Text, _ = json.Marshal(p)
@@ -78,40 +106,13 @@ func annotate(p Path, t *ast.Term) {
 	}
 }
 
-type trie map[string]trie
-
-func (t trie) add(p Path) {
-	if len(p) > 0 {
-		if _, ok := t[p[0]]; !ok {
-			t[p[0]] = map[string]trie{}
-		}
-		t[p[0]].add(p[1:])
-	}
-}
-
-func (t trie) list() []Path {
-	if len(t) == 0 {
-		return []Path{{}}
-	} else {
-		out := []Path{}
-		for k, child := range t {
-			for _, childPath := range child.list() {
-				p := Path{k}
-				p = append(p, childPath...)
-				out = append(out, p)
-			}
-		}
-		return out
-	}
-}
-
 type locationTracer struct {
 	locations map[Location]struct{}
-	trie      trie
+	tree      PathTree
 }
 
 func newLocationTracer() *locationTracer {
-	return &locationTracer{locations: map[Location]struct{}{}, trie: trie{}}
+	return &locationTracer{locations: map[Location]struct{}{}, tree: PathTree{}}
 }
 
 func (t *locationTracer) Enabled() bool {
@@ -137,7 +138,7 @@ func (t *locationTracer) coverTerm(term *ast.Term) {
 
 		var path Path
 		json.Unmarshal(term.Location.Text, &path)
-		t.trie.add(path)
+		t.tree.Insert(path)
 	}
 }
 
@@ -215,13 +216,13 @@ func infer(file string) error {
 	}
 
 	locations := []*Location{}
-	for _, path := range tracer.trie.list() {
+	for _, path := range tracer.tree.List() {
 		locations = append(locations, source.Location(path))
 	}
 
 	fmt.Fprintf(os.Stderr, "Results: %v\n", results)
 	fmt.Fprintf(os.Stderr, "Locations: %v\n", tracer.locations)
-	fmt.Fprintf(os.Stderr, "Trie: %v\n", tracer.trie.list())
+	fmt.Fprintf(os.Stderr, "Trie: %v\n", tracer.tree.List())
 	fmt.Fprintf(os.Stderr, "Locations 2: %v\n", locations)
 	return nil
 }
