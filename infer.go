@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/ast/location"
 	"github.com/open-policy-agent/opa/rego"
+	"github.com/open-policy-agent/opa/topdown"
 	"gopkg.in/yaml.v3"
 )
 
@@ -37,12 +37,78 @@ func nodeToTerm(file string, node *yaml.Node) *ast.Term {
 		fmt.Fprintf(os.Stderr, "Unknown kind: %v\n", node.Kind)
 		return nil
 	}
-	term.Location = &location.Location{
+	term.Location = &ast.Location{
 		File: file,
 		Row:  node.Line,
 		Col:  node.Column,
 	}
 	return term
+}
+
+type location struct {
+	File   string
+	Line   int
+	Column int
+}
+
+type locationTracer struct {
+	locations map[location]struct{}
+}
+
+func newLocationTracer() *locationTracer {
+	return &locationTracer{locations: map[location]struct{}{}}
+}
+
+func (t *locationTracer) Enabled() bool {
+	return true
+}
+
+func (t *locationTracer) Trace(event *topdown.Event) {
+	switch event.Op {
+	case topdown.UnifyOp:
+		t.traceUnify(event)
+	case topdown.EvalOp:
+		t.traceEval(event)
+	}
+}
+
+func (t *locationTracer) coverTerm(term *ast.Term) {
+	if term.Location != nil {
+		t.locations[location{
+			File:   term.Location.File,
+			Line:   term.Location.Row,
+			Column: term.Location.Col,
+		}] = struct{}{}
+	}
+}
+
+func (t *locationTracer) traceUnify(event *topdown.Event) {
+	if expr, ok := event.Node.(*ast.Expr); ok {
+		operands := expr.Operands()
+		if len(operands) == 2 {
+			t.coverTerm(event.Plug(operands[0]))
+			t.coverTerm(event.Plug(operands[1]))
+		}
+	}
+}
+
+func (t *locationTracer) traceEval(event *topdown.Event) {
+	if expr, ok := event.Node.(*ast.Expr); ok {
+		switch terms := expr.Terms.(type) {
+		case []*ast.Term:
+			if len(terms) < 1 {
+				break
+			}
+			operator := terms[0]
+			if _, ok := ast.BuiltinMap[operator.String()]; ok {
+				for _, term := range terms[1:] {
+					t.coverTerm(event.Plug(term))
+				}
+			}
+		case *ast.Term:
+			t.coverTerm(event.Plug(terms))
+		}
+	}
 }
 
 func infer(file string) error {
@@ -62,16 +128,19 @@ func infer(file string) error {
 		return err
 	}
 
+	tracer := newLocationTracer()
 	results, err := rego.New(
 		rego.Module("policy.rego", string(bytes)),
 		rego.ParsedInput(input.Value),
 		rego.Query("data.policy.deny"),
+		rego.Tracer(tracer),
 	).Eval(context.Background())
 	if err != nil {
 		return err
 	}
 
 	fmt.Fprintf(os.Stderr, "Results: %v\n", results)
+	fmt.Fprintf(os.Stderr, "Locations: %v\n", tracer.locations)
 	return nil
 }
 
