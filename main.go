@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/rego"
@@ -17,6 +18,10 @@ type Location struct {
 	File   string
 	Line   int
 	Column int
+}
+
+func (l Location) String() string {
+	return fmt.Sprintf("%s:%d:%d", l.File, l.Line, l.Column)
 }
 
 type Path []string
@@ -92,7 +97,7 @@ func (t PathTree) List() []Path {
 }
 
 type locationTracer struct {
-	tree      PathTree
+	tree PathTree
 }
 
 func newLocationTracer() *locationTracer {
@@ -142,8 +147,10 @@ func (t *locationTracer) traceEval(event *topdown.Event) {
 }
 
 func annotate(p Path, t *ast.Term) {
-	t.Location = &ast.Location{}
-	t.Location.Text, _ = json.Marshal(p)
+	if bytes, err := json.Marshal(p); err == nil {
+		t.Location = &ast.Location{}
+		t.Location.File = "path:" + string(bytes)
+	}
 	switch value := t.Value.(type) {
 	case ast.Object:
 		for _, key := range value.Keys() {
@@ -157,14 +164,16 @@ func annotate(p Path, t *ast.Term) {
 }
 
 func (t *locationTracer) used(term *ast.Term) {
-	if term.Location != nil && term.Location.Text != nil {
-		var path Path
-		json.Unmarshal(term.Location.Text, &path)
-		t.tree.Insert(path)
+	if term.Location != nil {
+		if val := strings.TrimPrefix(term.Location.File, "path:"); val != term.Location.File {
+			var path Path
+			json.Unmarshal([]byte(val), &path)
+			t.tree.Insert(path)
+		}
 	}
 }
 
-func infer(file string) error {
+func infer(policy string, file string) error {
 	source, err := NewSource(file)
 	if err != nil {
 		return err
@@ -191,15 +200,13 @@ func infer(file string) error {
 	}
 
 	annotate(Path{}, ast.NewTerm(input))
-	fmt.Fprintf(os.Stderr, "Input: %v\n", input)
-
-	if bytes, err = ioutil.ReadFile("policy.rego"); err != nil {
+	if bytes, err = ioutil.ReadFile(policy); err != nil {
 		return err
 	}
 
 	tracer := newLocationTracer()
 	results, err := rego.New(
-		rego.Module("policy.rego", string(bytes)),
+		rego.Module(policy, string(bytes)),
 		rego.ParsedInput(input),
 		rego.Query("data.policy.deny"),
 		rego.Tracer(tracer),
@@ -208,22 +215,16 @@ func infer(file string) error {
 		return err
 	}
 
-	locations := []*Location{}
-	for _, path := range tracer.tree.List() {
-		locations = append(locations, source.Location(path))
-	}
-
 	fmt.Fprintf(os.Stderr, "Results: %v\n", results)
-	fmt.Fprintf(os.Stderr, "Trie: %v\n", tracer.tree.List())
-	fmt.Fprintf(os.Stderr, "Locations 2: %v\n", locations)
+	for _, path := range tracer.tree.List() {
+		fmt.Fprintf(os.Stderr, "Location: %s\n", source.Location(path).String())
+	}
 	return nil
 }
 
 func main() {
-	if err := infer("template.yml"); err != nil {
+	if err := infer("policy.rego", "template.yml"); err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
-
-	fmt.Fprintf(os.Stderr, "Hello world!\n")
 }

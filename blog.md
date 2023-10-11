@@ -259,6 +259,8 @@ side to the unification as used:
 func (t *locationTracer) traceUnify
 ~~~
 
+`event.Plug` is a helper to fill in variables with their actual values.
+
 For an `EvalOp` event, we handle both (2) and (3).  In case of a built-in
 function, we will have an array of terms, of which the first element is the
 function, and the remaining elements are the arguments.  We can check that
@@ -270,4 +272,35 @@ The case for a standalone expression is easy.
 func (t *locationTracer) traceEval
 ~~~
 
-TODO: Should I explain what Plug does?
+# Annotating Terms
+
+When we try to implement `used(*ast.Term)`, the next question poses itself:
+given a term, how do we map it to a `Path` in the input?
+
+One option would be to search the input document for matching terms.  But that
+would give many false positives: a given string like `"10.0.0.0/24"` may appear
+many times in the input!
+
+Instead, we will _annotate_ all terms with their path.  Terms in OPA can contain
+some metadata, including the location in the Rego source file.  We can reuse
+this field to store an input `Path`.  This is a bit hacky, but with some
+squinting we are morally on the right side, since the field is meant to store
+locations? `¯\_(ツ)_/¯`
+
+```{.go snippet="main.go"}
+func annotate(p Path, t *ast.Term)
+```
+
+With this annotation in place, it's easy to write `used(*ast.Term)`:
+
+```{.go snippet="main.go"}
+func (t *locationTracer) used
+```
+
+# Wrapping Up
+
+That's
+
+```{.go snippet="main.go"}
+func infer
+```
