@@ -137,3 +137,49 @@ unnecessary allocation, but we can live with that.
 ~~~{.go snippet="main.go"}
 func (t PathTree) List
 ~~~
+
+We now have a way to nicely store the `Path`s that were used by a policy, and we
+have a way to convert those into source locations.
+
+# Static vs Runtime Analysis
+
+The next question is to figure out which `Path`s in a given input are used by
+a policy, and then `Insert` those into the tree.
+
+This is not an easy question, as the code may manipulate the input in different
+ways before using the paths.  We may need to "look through" user-defined
+(e.g. `has_bad_subnet`) as well as built-in functions (e.g. `object.get`), just
+to illustrate one of the possible obstacles:
+
+```ruby
+has_bad_subnet(props) {
+	[_, mask] = split(props.CidrBlock, "/")
+	to_number(mask) < 24
+}
+
+deny[resourceId] {
+	resource := input.Resources[resourceId]
+	resource.Type == "AWS::EC2::Subnet"
+	has_bad_subnet(object.get(resource, "Properties", {}))
+}
+```
+
+There are generally two ways of answering a question like that about a piece of
+code:
+
+ -  Static analysis: try to answer by looking at the syntax tree, types and
+    other static information that we can retrieve from (or add to) the OPA
+    interpreter.  The advantage is that we don't even need to run this policy,
+    which is great if we don't trust the policy authors.  The downside is that
+    static analysis techniques will usually result in some false negatives as
+    well as false positives.
+
+ -  Runtime analysis: trace the execution of specific policies, and infer from
+    what `Path`s are being used by looking at runtime information.  The downside
+    here is that we actually need to run the policy, and adding this analysis
+    may slow down policy evaluation.
+
+We tried both approaches but decided to go with the latter, since we found it
+much easier to implement reliably that way, and the performance overhead was
+negligible.  It's also worth mentioning that this is not a binary choice per se:
+you could do a hybrid approach where you combine the two.

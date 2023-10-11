@@ -1,5 +1,5 @@
 blog.html: blog.md snippet.lua main.go template.yml
-	pandoc -s --lua-filter=snippet.lua -o $@ $<
+	pandoc -s --table-of-contents --lua-filter=snippet.lua -o $@ $<
 
 .PHONY: run
 run:
