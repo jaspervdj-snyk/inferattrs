@@ -1,5 +1,5 @@
 ---
-title: 'Automagic source locations in Rego'
+title: 'Automatic Source Locations with Rego'
 author: 'Jasper Van der Jeugt'
 ...
 
@@ -9,18 +9,26 @@ At Snyk, we are big fans of [Open Policy Agent]'s Rego.
 Our [IaC product] is built around a large set of rules written in Rego,
 and customers can add their [own custom rules] as well.
 
+[Open Policy Agent]: https://www.openpolicyagent.org/
+[IaC product]: https://snyk.io/product/infrastructure-as-code-security/
+[own custom rules]: https://docs.snyk.io/scan-infrastructure/build-your-own-custom-rules/build-your-own-iac+-to-cloud-custom-rules
+
 ~~~{.go snippet="main.go"}
 type locationTracer
 ~~~
 
-We recently released a [whole series of improvements] to our IaC product, and
-in this blogpost we're taking a technical dive into a particularly interesting
-feature: automagic source code locations for rule violations.
+We recently released a [whole series of improvements][IaC+] to our IaC product,
+and in this blogpost we're taking a technical dive into a particularly
+interesting feature: automatic source code locations for rule violations.
 
-[Open Policy Agent]: https://www.openpolicyagent.org/
-[IaC product]: https://snyk.io/product/infrastructure-as-code-security/
-[own custom rules]: https://docs.snyk.io/scan-infrastructure/build-your-own-custom-rules/build-your-own-iac+-to-cloud-custom-rules
-[whole series of improvements]: https://snyk.io/blog/announcing-iac-plus-early-access/
+[IaC+]: https://snyk.io/blog/announcing-iac-plus-early-access/
+
+When checking IaC files against known issues, the updated `snyk iac test`
+command will show accurate file, line and column information each rule
+violation.  This works even for custom rules, without the user doing any work.
+In this blogpost, we explain some of the techniques behind this.
+
+TODO: Maybe a screenshot?
 
 The code in this blogpost serves as a standalone example of this technique,
 but in order to lean more towards a short story than an epic, we'll need to
@@ -38,7 +46,7 @@ subject for this blogpost since we can parse it without too many dependencies
 ~~~
 
 We want to ensure no subnets use a CIDR block larger than `/24`.  We can write
-a Rego policy to do just that.
+a Rego policy to do just that:
 
 ~~~{.ruby include="policy.rego"}
 ~~~
@@ -108,7 +116,7 @@ policies to IaC resources as well as resources discovered through cloud scans,
 the latter of which don't really have meaningful source locations, but they do
 have meaningful attribute paths!
 
-Next, we want to define sets of attribute paths.  Since paths are backed by
+So, we want to define sets of attribute paths.  Since paths are backed by
 arrays, we unfortunately can't use something like `map[Path]struct{}` as a set
 in Go.
 
@@ -131,7 +139,7 @@ We'll define a recursive method to insert a `Path` into our tree:
 func (t PathTree) Insert
 ~~~
 
-As well as a way to get a list of `Path`s back out.  This does a bit of
+...as well as a way to get a list of `Path`s back out.  This does a bit of
 unnecessary allocation, but we can live with that.
 
 ~~~{.go snippet="main.go"}
@@ -188,7 +196,7 @@ you could do a hybrid approach where you combine the two.
 OPA provides a [Tracer] interface that can be used to receive events about what
 the interpreter is doing.  A common use case for tracers to send metrics or
 debug information to some centralized log.  We will use it for something else,
-though.
+though 😎.
 
 [Tracer]: https://github.com/open-policy-agent/opa/blob/v0.57.0/topdown/trace.go
 
@@ -222,7 +230,7 @@ We are only interested in two of them.  We consider a value _used_ if:
     This also covers `==` and `:=`.  Since this is a test that can fail, we
     can state we _used_ the left hand side as well as the right hand side.
 
-2.  It is used as an argument to a built-in, e.g.:
+2.  It is used as an argument to a built-in function, e.g.:
 
     ```ruby
     regex.match("/24$", input.cidr)
@@ -261,9 +269,9 @@ func (t *locationTracer) traceUnify
 
 `event.Plug` is a helper to fill in variables with their actual values.
 
-For an `EvalOp` event, we handle both (2) and (3).  In case of a built-in
-function, we will have an array of terms, of which the first element is the
-function, and the remaining elements are the arguments.  We can check that
+An `EvalOp` event covers both (2) and (3) mentioned above.  In case of a
+built-in function, we will have an array of terms, of which the first element is
+the function, and the remaining elements are the arguments.  We can check that
 we're dealing with a built-in function by looking in `ast.BuiltinMap`.
 
 The case for a standalone expression is easy.
@@ -299,8 +307,33 @@ func (t *locationTracer) used
 
 # Wrapping Up
 
-That's
+That's it, folks!  We skipped over a lot of details, such as arrays, and how
+to apply this to a more complex IaC language like HCL.
+
+In addition to that, we're also marking the `Type` attributes as used, since
+we check those in our policy.  This isn't great, and as an alternative we try
+to provide a resources-oriented Rego API instead.  But that's beyond the scope
+of this blogpost for now.
+
+If you're interested in any of these features or more, we recommend checking out
+[snyk/policy-engine] for the core implementation or of course [our updated IaC
+product][IaC+] which comes with this and whole host of other features including
+an exhaustive rule bundle.
+
+[snyk/policy-engine]: https://github.com/snyk/policy-engine
+
+What follows is a main function to tie everything together and print out some
+debug information.  It's mostly just wrapping up the primitives we defined so
+far, and running it on an example.  But let's include it to make this blogpost
+function as a standalone example.
 
 ```{.go snippet="main.go"}
 func infer
 ```
+
+```{.go snippet="main.go"}
+func main
+```
+
+The full code for this PoC can be found in
+[this gist](https://gist.github.com/jaspervdj-snyk/53deba6fe7bc891e413fbaf4637a5d92).
