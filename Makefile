@@ -6,3 +6,7 @@ inferattrs.%: blog.md snippet.lua main.go template.yml
 .PHONY: run
 run:
 	go run main.go
+
+.PHONY: deploy
+deploy:
+	rsync inferattrs.html freddy:jaspervdj.be/tmp/

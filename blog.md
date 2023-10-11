@@ -13,10 +13,6 @@ and customers can add their [own custom rules] as well.
 [IaC product]: https://snyk.io/product/infrastructure-as-code-security/
 [own custom rules]: https://docs.snyk.io/scan-infrastructure/build-your-own-custom-rules/build-your-own-iac+-to-cloud-custom-rules
 
-~~~{.go snippet="main.go"}
-type locationTracer
-~~~
-
 We recently released a [whole series of improvements][IaC+] to our IaC product,
 and in this blogpost we're taking a technical dive into a particularly
 interesting feature: automatic source code locations for rule violations.
@@ -24,7 +20,7 @@ interesting feature: automatic source code locations for rule violations.
 [IaC+]: https://snyk.io/blog/announcing-iac-plus-early-access/
 
 When checking IaC files against known issues, the updated `snyk iac test`
-command will show accurate file, line and column information each rule
+command will show accurate file, line and column information for each rule
 violation.  This works even for custom rules, without the user doing any work.
 In this blogpost, we explain some of the techniques behind this.
 
@@ -37,10 +33,10 @@ in our [unified policy engine].
 
 [unified policy engine]: https://github.com/snyk/policy-engine/
 
-Let's start by looking at CloudFormation example.  While our IaC engine supports
-many formats, with a strong focus around Terraform, CloudFormation is a good
-subject for this blogpost since we can parse it without too many dependencies
-(it's just YAML after all).
+Let's start by looking at a CloudFormation example.  While our IaC engine
+supports many formats, with a strong focus around Terraform, CloudFormation
+is a good subject for this blogpost since we can parse it without too many
+dependencies (it's just YAML after all).
 
 ~~~{.yaml include="template.yml"}
 ~~~
@@ -317,15 +313,15 @@ of this blogpost for now.
 
 If you're interested in any of these features or more, we recommend checking out
 [snyk/policy-engine] for the core implementation or of course [our updated IaC
-product][IaC+] which comes with this and whole host of other features including
-an exhaustive rule bundle.
+product][IaC+] which comes with this and a whole host of other features
+including an exhaustive rule bundle.
 
 [snyk/policy-engine]: https://github.com/snyk/policy-engine
 
 What follows is a main function to tie everything together and print out some
 debug information.  It's mostly just wrapping up the primitives we defined so
 far, and running it on an example.  But let's include it to make this blogpost
-function as a standalone example.
+function as a reproducible standalone example.
 
 ```{.go snippet="main.go"}
 func infer
