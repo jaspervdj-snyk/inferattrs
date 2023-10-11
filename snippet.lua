@@ -27,12 +27,15 @@ function CodeBlock(cb)
         inbraces = false
       end
     end
-    return pandoc.CodeBlock(table.concat(snippet, "\n"), cb.attr), true
+    local text = table.concat(snippet, "\n")
+    text = text:gsub("\t", "    ")
+    return pandoc.CodeBlock(text, cb.attr), true
   end
 
   if cb.attributes.include then
-    local include = io.open(cb.attributes.include, "r"):read("*all")
-    return pandoc.CodeBlock(include, cb.attr)
+    local text = io.open(cb.attributes.include, "r"):read("*all")
+    text = text:gsub("\t", "    ")
+    return pandoc.CodeBlock(text, cb.attr)
   end
 
   return cb, true
