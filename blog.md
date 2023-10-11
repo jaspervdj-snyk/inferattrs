@@ -57,7 +57,7 @@ We can subdivide the problem in two parts:
 Let's start with (2) since it provides a good way to familiarize ourselves with
 the code.
 
-# Source Location retrieval
+# Source Location Retrieval
 
 A source location looks like this:
 
@@ -97,7 +97,7 @@ nodes:
 func (s *Source) Location
 ~~~
 
-# Sets and trees of paths
+# Sets and Trees of Paths
 
 With that out of the way, we've reduced the problem from automatically
 inferring _source locations_ that are used in a policy to automatically
@@ -164,8 +164,9 @@ deny[resourceId] {
 }
 ```
 
-There are generally two ways of answering a question like that about a piece of
-code:
+Fortunately, we are not alone in this since people have been curious about what
+programs do basically since the first program was written.  There are generally
+two ways of answering a question like that about a piece of code:
 
  -  Static analysis: try to answer by looking at the syntax tree, types and
     other static information that we can retrieve from (or add to) the OPA
@@ -183,3 +184,90 @@ We tried both approaches but decided to go with the latter, since we found it
 much easier to implement reliably that way, and the performance overhead was
 negligible.  It's also worth mentioning that this is not a binary choice per se:
 you could do a hybrid approach where you combine the two.
+
+OPA provides a [Tracer] interface that can be used to receive events about what
+the interpreter is doing.  A common use case for tracers to send metrics or
+debug information to some centralized log.  We will use it for something else,
+though.
+
+[Tracer]: https://github.com/open-policy-agent/opa/blob/v0.57.0/topdown/trace.go
+
+~~~{.go snippet="main.go"}
+type locationTracer
+~~~
+
+~~~{.go snippet="main.go"}
+func newLocationTracer() *locationTracer
+~~~
+
+~~~{.go snippet="main.go"}
+func (t *locationTracer) Enabled()
+~~~
+
+# Tracing Usage of Terms
+
+Rego is an expressive language.  Even though some desugaring happens to reduce
+it to a simpler format for the interpreter, there are still a fair number of
+events.
+
+We are only interested in two of them.  We consider a value _used_ if:
+
+1.  It is unified (you can think of this as assigned, we won't go in detail)
+    against another expression, e.g.:
+
+    ```ruby
+    x = input.Foo
+    ```
+
+    This also covers `==` and `:=`.  Since this is a test that can fail, we
+    can state we _used_ the left hand side as well as the right hand side.
+
+2.  It is used as an argument to a built-in, e.g.:
+
+    ```ruby
+    regex.match("/24$", input.cidr)
+    ```
+
+    While Rego borrows some concepts from [lazy languages], arguments to
+    built-in functions are always completely grounded before the built-in is
+    invoked.  Therefore, we can say we _used_ all arguments supplied to the
+    built-in.
+
+3.  It used as a standalone expression, e.g.:
+
+    ```ruby
+    volume.encrypted
+    ```
+
+    This is commonly used to evaluate booleans, and check that attributes
+    do exists.
+
+[lazy languages]: https://en.wikipedia.org/wiki/Lazy_evaluation
+
+Time to implement this.  We match two events and delegate to a specific function
+to make the code a bit more readable:
+
+~~~{.go snippet="main.go"}
+func (t *locationTracer) Trace
+~~~
+
+We'll handle the insertion into our `PathTree` later into an auxiliary function
+called `used(*ast.Term)`.  For now, let's mark both the left- and right-hand
+side to the unification as used:
+
+~~~{.go snippet="main.go"}
+func (t *locationTracer) traceUnify
+~~~
+
+For an `EvalOp` event, we handle both (2) and (3).  In case of a built-in
+function, we will have an array of terms, of which the first element is the
+function, and the remaining elements are the arguments.  We can check that
+we're dealing with a built-in function by looking in `ast.BuiltinMap`.
+
+The case for a standalone expression is easy.
+
+~~~{.go snippet="main.go"}
+func (t *locationTracer) traceEval
+~~~
+
+TODO: Should I explain what Plug does?

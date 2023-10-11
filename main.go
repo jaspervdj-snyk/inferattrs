@@ -91,28 +91,12 @@ func (t PathTree) List() []Path {
 	}
 }
 
-func annotate(p Path, t *ast.Term) {
-	t.Location = &ast.Location{}
-	t.Location.Text, _ = json.Marshal(p)
-	switch value := t.Value.(type) {
-	case ast.Object:
-		for _, key := range value.Keys() {
-			if str, ok := key.Value.(ast.String); ok {
-				p = append(p, string(str))
-				annotate(p, value.Get(key))
-				p = p[:len(p)-1]
-			}
-		}
-	}
-}
-
 type locationTracer struct {
-	locations map[Location]struct{}
 	tree      PathTree
 }
 
 func newLocationTracer() *locationTracer {
-	return &locationTracer{locations: map[Location]struct{}{}, tree: PathTree{}}
+	return &locationTracer{tree: PathTree{}}
 }
 
 func (t *locationTracer) Enabled() bool {
@@ -128,26 +112,12 @@ func (t *locationTracer) Trace(event *topdown.Event) {
 	}
 }
 
-func (t *locationTracer) coverTerm(term *ast.Term) {
-	if term.Location != nil && term.Location.Text != nil {
-		t.locations[Location{
-			File:   term.Location.File,
-			Line:   term.Location.Row,
-			Column: term.Location.Col,
-		}] = struct{}{}
-
-		var path Path
-		json.Unmarshal(term.Location.Text, &path)
-		t.tree.Insert(path)
-	}
-}
-
 func (t *locationTracer) traceUnify(event *topdown.Event) {
 	if expr, ok := event.Node.(*ast.Expr); ok {
 		operands := expr.Operands()
 		if len(operands) == 2 {
-			t.coverTerm(event.Plug(operands[0]))
-			t.coverTerm(event.Plug(operands[1]))
+			t.used(event.Plug(operands[0]))
+			t.used(event.Plug(operands[1]))
 		}
 	}
 }
@@ -162,12 +132,35 @@ func (t *locationTracer) traceEval(event *topdown.Event) {
 			operator := terms[0]
 			if _, ok := ast.BuiltinMap[operator.String()]; ok {
 				for _, term := range terms[1:] {
-					t.coverTerm(event.Plug(term))
+					t.used(event.Plug(term))
 				}
 			}
 		case *ast.Term:
-			t.coverTerm(event.Plug(terms))
+			t.used(event.Plug(terms))
 		}
+	}
+}
+
+func annotate(p Path, t *ast.Term) {
+	t.Location = &ast.Location{}
+	t.Location.Text, _ = json.Marshal(p)
+	switch value := t.Value.(type) {
+	case ast.Object:
+		for _, key := range value.Keys() {
+			if str, ok := key.Value.(ast.String); ok {
+				p = append(p, string(str))
+				annotate(p, value.Get(key))
+				p = p[:len(p)-1]
+			}
+		}
+	}
+}
+
+func (t *locationTracer) used(term *ast.Term) {
+	if term.Location != nil && term.Location.Text != nil {
+		var path Path
+		json.Unmarshal(term.Location.Text, &path)
+		t.tree.Insert(path)
 	}
 }
 
@@ -221,7 +214,6 @@ func infer(file string) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "Results: %v\n", results)
-	fmt.Fprintf(os.Stderr, "Locations: %v\n", tracer.locations)
 	fmt.Fprintf(os.Stderr, "Trie: %v\n", tracer.tree.List())
 	fmt.Fprintf(os.Stderr, "Locations 2: %v\n", locations)
 	return nil
