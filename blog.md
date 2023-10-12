@@ -69,12 +69,16 @@ A source location looks like this:
 type Location
 ~~~
 
+~~~{.go snippet="main.go"}
+func (l Location) String() string {
+~~~
+
 We will also introduce an auxiliary type to represent paths in YAML.  Note that
 we won't support arrays in our proof-of-concept, so we can get by just using an
 array of strings.
 
 ~~~{.go snippet="main.go"}
-type Path
+type Path []string
 ~~~
 
 One example of a path would be something like:
