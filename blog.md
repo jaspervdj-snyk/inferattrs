@@ -24,7 +24,7 @@ command will show accurate file, line and column information for each rule
 violation.  This works even for custom rules, without the user doing any work.
 In this blogpost, we explain some of the techniques behind this.
 
-TODO: Maybe a screenshot?
+![Screenshot of IaC+](screenshot.jpg)
 
 The code in this blogpost serves as a standalone example of this technique,
 but in order to lean more towards a short story than an epic, we'll need to
