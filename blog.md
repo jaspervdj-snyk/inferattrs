@@ -304,7 +304,10 @@ and arrays out.
 func annotate(p Path, t *ast.Term)
 ```
 
-With this annotation in place, it's easy to write `used(*ast.Term)`:
+With this annotation in place, it's easy to write `used(*ast.Term)`.  The only
+thing to keep in mind is that not all values are _annotated_: we only do that
+for those coming from the input document, not e.g. literals embedded in the
+Rego source code.
 
 ```{.go snippet="main.go"}
 func (t *locationTracer) used
