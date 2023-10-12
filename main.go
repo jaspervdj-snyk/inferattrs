@@ -147,10 +147,12 @@ func (t *locationTracer) traceEval(event *topdown.Event) {
 }
 
 func annotate(p Path, t *ast.Term) {
+	// Annotate current term by setting location.
 	if bytes, err := json.Marshal(p); err == nil {
 		t.Location = &ast.Location{}
 		t.Location.File = "path:" + string(bytes)
 	}
+	// Recursively annotate children.
 	switch value := t.Value.(type) {
 	case ast.Object:
 		for _, key := range value.Keys() {

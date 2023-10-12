@@ -291,6 +291,11 @@ this field to store an input `Path`.  This is a bit hacky, but with some
 squinting we are morally on the right side, since the field is meant to store
 locations? `¯\_(ツ)_/¯`
 
+`annotate` implements a recursive traversal to determine the `Path` at each node
+in the value.  For the scope of this blogpost you can roughly think of these
+values as JSON values.  For conciseness, we only support objects and leave sets
+and arrays out.
+
 ```{.go snippet="main.go"}
 func annotate(p Path, t *ast.Term)
 ```
