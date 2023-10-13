@@ -3,13 +3,13 @@ Resources:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: 10.0.0.0/16
-  MainSubnet:
+  PublicSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
         Ref: Vpc
       CidrBlock: 10.0.0.0/24
-  BackupSubnet:
+  PrivateSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:

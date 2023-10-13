@@ -81,7 +81,8 @@ func (t PathTree) Insert(path Path) {
 
 func (t PathTree) List() []Path {
 	if len(t) == 0 {
-		return []Path{{}} // Return the empty path
+		// Return the empty path
+		return []Path{{}}
 	} else {
 		out := []Path{}
 		for k, child := range t {
@@ -132,6 +133,8 @@ func (t *locationTracer) traceEval(event *topdown.Event) {
 		switch terms := expr.Terms.(type) {
 		case []*ast.Term:
 			if len(terms) < 1 {
+				// I'm not sure what this is, but it's definitely
+				// not a built-in function application.
 				break
 			}
 			operator := terms[0]

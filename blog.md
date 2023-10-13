@@ -84,7 +84,7 @@ type Path []string
 One example of a path would be something like:
 
 ~~~{.go}
-Path{"Resources", "BackupSubnet", "Properties", "CidrBlock"}
+Path{"Resources", "PrivateSubnet", "Properties", "CidrBlock"}
 ~~~
 
 Now we can provide a convenience type to load YAML and tell us the `Location`
@@ -129,8 +129,8 @@ type PathTree
 This representation has other advantages: in general, we only care about the
 _longest_ paths that a policy uses, since they are more _specific_.
 Our example policy is using
-`Path{"Resources", "BackupSubnet", "Properties"}` as well as
-`Path{"Resources", "BackupSubnet", "Properties", "CidrBlock"}`, and we only
+`Path{"Resources", "PrivateSubnet", "Properties"}` as well as
+`Path{"Resources", "PrivateSubnet", "Properties", "CidrBlock"}`, and we only
 care about the latter.
 
 We'll define a recursive method to insert a `Path` into our tree:
@@ -194,7 +194,7 @@ negligible.  It's also worth mentioning that this is not a binary choice per se:
 you could do a hybrid approach where you combine the two.
 
 OPA provides a [Tracer] interface that can be used to receive events about what
-the interpreter is doing.  A common use case for tracers to send metrics or
+the interpreter is doing.  A common use case for tracers is to send metrics or
 debug information to some centralized log.  We will use it for something else,
 though 😎.
 
@@ -259,7 +259,7 @@ to make the code a bit more readable:
 func (t *locationTracer) Trace
 ~~~
 
-We'll handle the insertion into our `PathTree` later into an auxiliary function
+We'll handle the insertion into our `PathTree` later in an auxiliary function
 called `used(*ast.Term)`.  For now, let's mark both the left- and right-hand
 side to the unification as used:
 
