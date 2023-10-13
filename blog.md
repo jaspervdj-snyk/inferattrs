@@ -159,7 +159,7 @@ ways before using the paths.  We may need to "look through" user-defined
 (e.g. `has_bad_subnet`) as well as built-in functions (e.g. `object.get`), just
 to illustrate one of the possible obstacles:
 
-```ruby
+~~~ruby
 has_bad_subnet(props) {
 	[_, mask] = split(props.CidrBlock, "/")
 	to_number(mask) < 24
@@ -170,7 +170,7 @@ deny[resourceId] {
 	resource.Type == "AWS::EC2::Subnet"
 	has_bad_subnet(object.get(resource, "Properties", {}))
 }
-```
+~~~
 
 Fortunately, we are not alone in this since people have been curious about what
 programs do basically since the first program was written.  There are generally
@@ -223,18 +223,18 @@ We are only interested in two of them.  We consider a value _used_ if:
 1.  It is unified (you can think of this as assigned, we won't go in detail)
     against another expression, e.g.:
 
-    ```ruby
+    ~~~ruby
     x = input.Foo
-    ```
+    ~~~
 
     This also covers `==` and `:=`.  Since this is a test that can fail, we
     can state we _used_ the left hand side as well as the right hand side.
 
 2.  It is used as an argument to a built-in function, e.g.:
 
-    ```ruby
+    ~~~ruby
     regex.match("/24$", input.cidr)
-    ```
+    ~~~
 
     While Rego borrows some concepts from [lazy languages], arguments to
     built-in functions are always completely grounded before the built-in is
@@ -243,9 +243,9 @@ We are only interested in two of them.  We consider a value _used_ if:
 
 3.  It used as a standalone expression, e.g.:
 
-    ```ruby
+    ~~~ruby
     volume.encrypted
-    ```
+    ~~~
 
     This is commonly used to evaluate booleans, and check that attributes
     do exists.
@@ -295,23 +295,33 @@ this field to store an input `Path`.  This is a bit hacky, but with some
 squinting we are morally on the right side, since the field is meant to store
 locations? `¯\_(ツ)_/¯`
 
-`annotate` implements a recursive traversal to determine the `Path` at each node
-in the value.  For the scope of this blogpost you can roughly think of these
-values as JSON values.  For conciseness, we only support objects and leave sets
-and arrays out.
+The following snippet illustrates how we want to the annotate the first
+few lines of our CloudFormation template:
 
-```{.go snippet="main.go"}
+~~~{.yaml}
+Resources:                    # ["Resources"]
+  Vpc:                        # ["Resources", "Vpc"]
+    Type: AWS::EC2::VPC       # ["Resources", "Vpc", "Type"]
+    Properties:               # ["Resources", "Vpc", "Properties"]
+      CidrBlock: 10.0.0.0/16  # ["Resources", "Vpc", "Properties", "CidrBlock"]
+~~~
+
+`annotate` implements a recursive traversal to determine the `Path` at each
+node in the value.  For conciseness, we only support objects and leave sets and
+arrays out.
+
+~~~{.go snippet="main.go"}
 func annotate(p Path, t *ast.Term)
-```
+~~~
 
 With this annotation in place, it's easy to write `used(*ast.Term)`.  The only
 thing to keep in mind is that not all values are _annotated_: we only do that
 for those coming from the input document, not e.g. literals embedded in the
 Rego source code.
 
-```{.go snippet="main.go"}
+~~~{.go snippet="main.go"}
 func (t *locationTracer) used
-```
+~~~
 
 # Wrapping Up
 
@@ -335,13 +345,13 @@ debug information.  It's mostly just wrapping up the primitives we defined so
 far, and running it on an example.  But let's include it to make this blogpost
 function as a reproducible standalone example.
 
-```{.go snippet="main.go"}
+~~~{.go snippet="main.go"}
 func infer
-```
+~~~
 
-```{.go snippet="main.go"}
+~~~{.go snippet="main.go"}
 func main
-```
+~~~
 
 The full code for this PoC can be found in
 [this gist](https://gist.github.com/jaspervdj-snyk/53deba6fe7bc891e413fbaf4637a5d92).
