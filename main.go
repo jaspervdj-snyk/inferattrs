@@ -49,10 +49,13 @@ func (source *Source) Location(path Path) *Location {
 	cursor := source.root
 	for len(path) > 0 {
 		switch cursor.Kind {
-		// Ignore multiple docs in our PoC
+		// Ignore multiple docs in our PoC.
 		case yaml.DocumentNode:
 			cursor = cursor.Content[0]
 		case yaml.MappingNode:
+			// Objects are stored as an array.
+			// Content[2 * n] holds to the key and
+			// Content[2 * n + 1] to the value.
 			for i := 0; i < len(cursor.Content); i += 2 {
 				if cursor.Content[i].Value == path[0] {
 					cursor = cursor.Content[i+1]
@@ -81,12 +84,12 @@ func (tree PathTree) Insert(path Path) {
 
 func (tree PathTree) List() []Path {
 	if len(tree) == 0 {
-		// Return the empty path
+		// Return the empty path.
 		return []Path{{}}
 	} else {
 		out := []Path{}
 		for k, child := range tree {
-			// Prepend `k` to every child path
+			// Prepend `k` to every child path.
 			for _, childPath := range child.List() {
 				path := Path{k}
 				path = append(path, childPath...)
@@ -122,6 +125,7 @@ func (tracer *locationTracer) traceUnify(event *topdown.Event) {
 	if expr, ok := event.Node.(*ast.Expr); ok {
 		operands := expr.Operands()
 		if len(operands) == 2 {
+			// Unification (1)
 			tracer.used(event.Plug(operands[0]))
 			tracer.used(event.Plug(operands[1]))
 		}
@@ -139,11 +143,13 @@ func (tracer *locationTracer) traceEval(event *topdown.Event) {
 			}
 			operator := terms[0]
 			if _, ok := ast.BuiltinMap[operator.String()]; ok {
+				// Built-in function call (2)
 				for _, term := range terms[1:] {
 					tracer.used(event.Plug(term))
 				}
 			}
 		case *ast.Term:
+			// Standalone expression (3)
 			tracer.used(event.Plug(terms))
 		}
 	}
@@ -170,7 +176,9 @@ func annotate(path Path, term *ast.Term) {
 
 func (tracer *locationTracer) used(term *ast.Term) {
 	if term.Location != nil {
-		if val := strings.TrimPrefix(term.Location.File, "path:"); val != term.Location.File {
+		val := strings.TrimPrefix(term.Location.File, "path:")
+		if len(val) != len(term.Location.File) {
+			// Only when we stripped a "path" suffix.
 			var path Path
 			json.Unmarshal([]byte(val), &path)
 			tracer.tree.Insert(path)
