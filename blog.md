@@ -22,11 +22,10 @@ interesting feature: automatic source code locations for rule violations.
 When checking IaC files against known issues, the updated `snyk iac test`
 command will show accurate file, line and column information for each rule
 violation.  This works even for custom rules, without the user doing any work.
-In this blogpost, we explain some of the techniques behind this.
 
 ![Screenshot of IaC+](screenshot.jpg)
 
-The code in this blogpost serves as a standalone example of this technique,
+In this blogpost, we provide a standalone proof-of-concept of this technique,
 but in order to lean more towards a short story than an epic, we'll need to
 make some simplifications.  The full implementation of this is available
 in our [unified policy engine].
