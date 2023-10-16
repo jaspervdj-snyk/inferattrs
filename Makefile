@@ -1,8 +1,13 @@
 default: inferattrs.html inferattrs.docx
 
-inferattrs.%: blog.md snippet.lua main.go template.yml screenshot.jpg
+SOURCES=blog.md snippet.lua main.go template.yml screenshot.jpg
+
+inferattrs.html: $(SOURCES)
 	pandoc -s --table-of-contents --embed-resources \
 		--lua-filter=snippet.lua -o $@ $<
+
+inferattrs.docx: $(SOURCES)
+	pandoc -s --embed-resources --lua-filter=snippet.lua -o $@ $<
 
 .PHONY: run
 run:

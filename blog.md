@@ -70,7 +70,7 @@ type Location
 ~~~
 
 ~~~{.go snippet="main.go"}
-func (l Location) String() string {
+func (loc Location) String() string {
 ~~~
 
 We will also introduce an auxiliary type to represent paths in YAML.  Note that
@@ -102,7 +102,7 @@ Finding the source location of a `Path` comes down to walking a tree of YAML
 nodes:
 
 ~~~{.go snippet="main.go"}
-func (s *Source) Location
+func (source *Source) Location
 ~~~
 
 # Sets and Trees of Paths
@@ -136,14 +136,14 @@ care about the latter.
 We'll define a recursive method to insert a `Path` into our tree:
 
 ~~~{.go snippet="main.go"}
-func (t PathTree) Insert
+func (tree PathTree) Insert
 ~~~
 
 ...as well as a way to get a list of `Path`s back out.  This does a bit of
 unnecessary allocation, but we can live with that.
 
 ~~~{.go snippet="main.go"}
-func (t PathTree) List
+func (tree PathTree) List
 ~~~
 
 We now have a way to nicely store the `Path`s that were used by a policy, and we
@@ -209,7 +209,7 @@ func newLocationTracer() *locationTracer
 ~~~
 
 ~~~{.go snippet="main.go"}
-func (t *locationTracer) Enabled()
+func (tracer *locationTracer) Enabled()
 ~~~
 
 # Tracing Usage of Terms
@@ -256,7 +256,7 @@ Time to implement this.  We match two events and delegate to a specific function
 to make the code a bit more readable:
 
 ~~~{.go snippet="main.go"}
-func (t *locationTracer) Trace
+func (tracer *locationTracer) Trace
 ~~~
 
 We'll handle the insertion into our `PathTree` later in an auxiliary function
@@ -264,7 +264,7 @@ called `used(*ast.Term)`.  For now, let's mark both the left- and right-hand
 side to the unification as used:
 
 ~~~{.go snippet="main.go"}
-func (t *locationTracer) traceUnify
+func (tracer *locationTracer) traceUnify
 ~~~
 
 `event.Plug` is a helper to fill in variables with their actual values.
@@ -277,7 +277,7 @@ we're dealing with a built-in function by looking in `ast.BuiltinMap`.
 The case for a standalone expression is easy.
 
 ~~~{.go snippet="main.go"}
-func (t *locationTracer) traceEval
+func (tracer *locationTracer) traceEval
 ~~~
 
 # Annotating Terms
@@ -311,7 +311,7 @@ node in the value.  For conciseness, we only support objects and leave sets and
 arrays out.
 
 ~~~{.go snippet="main.go"}
-func annotate(p Path, t *ast.Term)
+func annotate(path Path, term *ast.Term)
 ~~~
 
 With this annotation in place, it's easy to write `used(*ast.Term)`.  The only
@@ -320,7 +320,7 @@ for those coming from the input document, not e.g. literals embedded in the
 Rego source code.
 
 ~~~{.go snippet="main.go"}
-func (t *locationTracer) used
+func (tracer *locationTracer) used
 ~~~
 
 # Wrapping Up

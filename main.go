@@ -20,8 +20,8 @@ type Location struct {
 	Column int
 }
 
-func (l Location) String() string {
-	return fmt.Sprintf("%s:%d:%d", l.File, l.Line, l.Column)
+func (loc Location) String() string {
+	return fmt.Sprintf("%s:%d:%d", loc.File, loc.Line, loc.Column)
 }
 
 type Path []string
@@ -45,8 +45,8 @@ func NewSource(file string) (*Source, error) {
 	return &Source{file: file, root: &root}, nil
 }
 
-func (s *Source) Location(path Path) *Location {
-	cursor := s.root
+func (source *Source) Location(path Path) *Location {
+	cursor := source.root
 	for len(path) > 0 {
 		switch cursor.Kind {
 		// Ignore multiple docs in our PoC
@@ -62,7 +62,7 @@ func (s *Source) Location(path Path) *Location {
 		}
 	}
 	return &Location{
-		File:   s.file,
+		File:   source.file,
 		Line:   cursor.Line,
 		Column: cursor.Column,
 	}
@@ -70,22 +70,22 @@ func (s *Source) Location(path Path) *Location {
 
 type PathTree map[string]PathTree
 
-func (t PathTree) Insert(path Path) {
+func (tree PathTree) Insert(path Path) {
 	if len(path) > 0 {
-		if _, ok := t[path[0]]; !ok {
-			t[path[0]] = map[string]PathTree{}
+		if _, ok := tree[path[0]]; !ok {
+			tree[path[0]] = map[string]PathTree{}
 		}
-		t[path[0]].Insert(path[1:])
+		tree[path[0]].Insert(path[1:])
 	}
 }
 
-func (t PathTree) List() []Path {
-	if len(t) == 0 {
+func (tree PathTree) List() []Path {
+	if len(tree) == 0 {
 		// Return the empty path
 		return []Path{{}}
 	} else {
 		out := []Path{}
-		for k, child := range t {
+		for k, child := range tree {
 			// Prepend `k` to every child path
 			for _, childPath := range child.List() {
 				path := Path{k}
@@ -105,30 +105,30 @@ func newLocationTracer() *locationTracer {
 	return &locationTracer{tree: PathTree{}}
 }
 
-func (t *locationTracer) Enabled() bool {
+func (tracer *locationTracer) Enabled() bool {
 	return true
 }
 
-func (t *locationTracer) Trace(event *topdown.Event) {
+func (tracer *locationTracer) Trace(event *topdown.Event) {
 	switch event.Op {
 	case topdown.UnifyOp:
-		t.traceUnify(event)
+		tracer.traceUnify(event)
 	case topdown.EvalOp:
-		t.traceEval(event)
+		tracer.traceEval(event)
 	}
 }
 
-func (t *locationTracer) traceUnify(event *topdown.Event) {
+func (tracer *locationTracer) traceUnify(event *topdown.Event) {
 	if expr, ok := event.Node.(*ast.Expr); ok {
 		operands := expr.Operands()
 		if len(operands) == 2 {
-			t.used(event.Plug(operands[0]))
-			t.used(event.Plug(operands[1]))
+			tracer.used(event.Plug(operands[0]))
+			tracer.used(event.Plug(operands[1]))
 		}
 	}
 }
 
-func (t *locationTracer) traceEval(event *topdown.Event) {
+func (tracer *locationTracer) traceEval(event *topdown.Event) {
 	if expr, ok := event.Node.(*ast.Expr); ok {
 		switch terms := expr.Terms.(type) {
 		case []*ast.Term:
@@ -140,40 +140,40 @@ func (t *locationTracer) traceEval(event *topdown.Event) {
 			operator := terms[0]
 			if _, ok := ast.BuiltinMap[operator.String()]; ok {
 				for _, term := range terms[1:] {
-					t.used(event.Plug(term))
+					tracer.used(event.Plug(term))
 				}
 			}
 		case *ast.Term:
-			t.used(event.Plug(terms))
+			tracer.used(event.Plug(terms))
 		}
 	}
 }
 
-func annotate(p Path, t *ast.Term) {
+func annotate(path Path, term *ast.Term) {
 	// Annotate current term by setting location.
-	if bytes, err := json.Marshal(p); err == nil {
-		t.Location = &ast.Location{}
-		t.Location.File = "path:" + string(bytes)
+	if bytes, err := json.Marshal(path); err == nil {
+		term.Location = &ast.Location{}
+		term.Location.File = "path:" + string(bytes)
 	}
 	// Recursively annotate children.
-	switch value := t.Value.(type) {
+	switch value := term.Value.(type) {
 	case ast.Object:
 		for _, key := range value.Keys() {
 			if str, ok := key.Value.(ast.String); ok {
-				p = append(p, string(str))
-				annotate(p, value.Get(key))
-				p = p[:len(p)-1]
+				path = append(path, string(str))
+				annotate(path, value.Get(key))
+				path = path[:len(path)-1]
 			}
 		}
 	}
 }
 
-func (t *locationTracer) used(term *ast.Term) {
+func (tracer *locationTracer) used(term *ast.Term) {
 	if term.Location != nil {
 		if val := strings.TrimPrefix(term.Location.File, "path:"); val != term.Location.File {
 			var path Path
 			json.Unmarshal([]byte(val), &path)
-			t.tree.Insert(path)
+			tracer.tree.Insert(path)
 		}
 	}
 }
