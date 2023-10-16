@@ -73,9 +73,21 @@ type Location
 func (loc Location) String() string {
 ~~~
 
-We will also introduce an auxiliary type to represent paths in YAML.  Note that
-we won't support arrays in our proof-of-concept, so we can get by just using an
-array of strings.
+We will also introduce an auxiliary type to represent paths in YAML.  In YAML,
+there are two kinds of nested documents: arrays and objects:
+
+```yaml
+some_array:
+- hello
+- world
+some_object:
+  foo: bar
+```
+
+If we wanted to be able to refer to any subdocument, we could use something akin
+to JSON paths.  In the example above, `["some_array", 1]` would then point to
+`"word"`.  But since we won't support arrays in our proof-of-concept, we can get
+by just using an array of strings.
 
 ~~~{.go snippet="main.go"}
 type Path []string
