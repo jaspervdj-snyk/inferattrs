@@ -1,18 +1,11 @@
-default: inferattrs.html inferattrs.docx
-
-SOURCES=blog.md snippet.lua main.go template.yml screenshot.jpg
-
-inferattrs.html: $(SOURCES)
-	pandoc -s --table-of-contents --embed-resources \
-		--lua-filter=snippet.lua -o $@ $<
-
-inferattrs.docx: $(SOURCES)
-	pandoc -s --embed-resources --lua-filter=snippet.lua -o $@ $<
+.PHONY: build
+build:
+	mkdir dist
+	pandoc -s --table-of-contents \
+		--lua-filter=snippet.lua \
+		-o dist/index.html blog.md
+	cp screenshot.jpg dist
 
 .PHONY: run
 run:
 	go run main.go
-
-.PHONY: deploy
-deploy:
-	rsync inferattrs.html freddy:jaspervdj.be/tmp/
