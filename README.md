@@ -6,4 +6,8 @@ This is the PoC behind
  -  `main.go` contains the full code for our PoC
  -  `blog.md` contains the draft text
  -  `policy.rego` and `template.yml` are the example files used
- -  `Makefile` and `snippet.lua` turn everything into a readable blogpost
+
+All the other files help turning it into a readable blogpost.
+
+A rendered version also exists on github pages:
+<https://jaspervdj-snyk.github.io/inferattrs/>.
