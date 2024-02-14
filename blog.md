@@ -365,4 +365,4 @@ func main
 ~~~
 
 The full code for this PoC can be found in
-[this gist](https://gist.github.com/jaspervdj-snyk/53deba6fe7bc891e413fbaf4637a5d92).
+[this repository](https://github.com/jaspervdj-snyk/inferattrs/).
